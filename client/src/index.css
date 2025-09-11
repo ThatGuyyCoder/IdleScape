@@ -1,0 +1,141 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(42, 15%, 95%);
+  --foreground: hsl(220, 9%, 12%);
+  --card: hsl(40, 12%, 91%);
+  --card-foreground: hsl(220, 9%, 12%);
+  --popover: hsl(40, 12%, 91%);
+  --popover-foreground: hsl(220, 9%, 12%);
+  --primary: hsl(137, 35%, 25%);
+  --primary-foreground: hsl(0, 0%, 98%);
+  --secondary: hsl(43, 74%, 49%);
+  --secondary-foreground: hsl(220, 9%, 12%);
+  --muted: hsl(40, 8%, 85%);
+  --muted-foreground: hsl(220, 5%, 46%);
+  --accent: hsl(38, 92%, 50%);
+  --accent-foreground: hsl(220, 9%, 12%);
+  --destructive: hsl(356.3033, 90.5579%, 54.3137%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --border: hsl(40, 12%, 82%);
+  --input: hsl(40, 8%, 85%);
+  --ring: hsl(137, 35%, 25%);
+  --chart-1: hsl(137, 35%, 25%);
+  --chart-2: hsl(159.7826, 100%, 36.0784%);
+  --chart-3: hsl(42.0290, 92.8251%, 56.2745%);
+  --chart-4: hsl(147.1429, 78.5047%, 41.9608%);
+  --chart-5: hsl(341.4894, 75.2000%, 50.9804%);
+  --sidebar: hsl(40, 12%, 91%);
+  --sidebar-foreground: hsl(220, 9%, 12%);
+  --sidebar-primary: hsl(137, 35%, 25%);
+  --sidebar-primary-foreground: hsl(0, 0%, 98%);
+  --sidebar-accent: hsl(40, 8%, 85%);
+  --sidebar-accent-foreground: hsl(137, 35%, 25%);
+  --sidebar-border: hsl(40, 12%, 82%);
+  --sidebar-ring: hsl(137, 35%, 25%);
+  --font-sans: Inter, sans-serif;
+  --font-serif: Merriweather, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 8px;
+}
+
+.dark {
+  --background: hsl(220, 9%, 12%);
+  --foreground: hsl(42, 15%, 95%);
+  --card: hsl(220, 9%, 18%);
+  --card-foreground: hsl(42, 15%, 95%);
+  --popover: hsl(220, 9%, 18%);
+  --popover-foreground: hsl(42, 15%, 95%);
+  --primary: hsl(137, 35%, 35%);
+  --primary-foreground: hsl(0, 0%, 98%);
+  --secondary: hsl(43, 74%, 59%);
+  --secondary-foreground: hsl(220, 9%, 12%);
+  --muted: hsl(220, 5%, 25%);
+  --muted-foreground: hsl(42, 8%, 65%);
+  --accent: hsl(38, 92%, 60%);
+  --accent-foreground: hsl(220, 9%, 12%);
+  --destructive: hsl(356.3033, 90.5579%, 54.3137%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --border: hsl(220, 5%, 25%);
+  --input: hsl(220, 5%, 25%);
+  --ring: hsl(137, 35%, 35%);
+  --sidebar: hsl(220, 9%, 18%);
+  --sidebar-foreground: hsl(42, 15%, 95%);
+  --sidebar-primary: hsl(137, 35%, 35%);
+  --sidebar-primary-foreground: hsl(0, 0%, 98%);
+  --sidebar-accent: hsl(220, 5%, 25%);
+  --sidebar-accent-foreground: hsl(137, 35%, 35%);
+  --sidebar-border: hsl(220, 5%, 25%);
+  --sidebar-ring: hsl(137, 35%, 35%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+.skill-card {
+  transition: all 0.3s ease;
+}
+
+.skill-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(45, 74, 58, 0.15);
+}
+
+.progress-bar {
+  background: linear-gradient(90deg, var(--secondary) 0%, var(--accent) 100%);
+  height: 8px;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.skill-icon {
+  transition: all 0.3s ease;
+}
+
+.skill-card:hover .skill-icon {
+  transform: scale(1.1);
+}
+
+.resource-item {
+  transition: all 0.2s ease;
+}
+
+.resource-item:hover {
+  background-color: var(--muted);
+}
+
+.equipment-slot {
+  background: linear-gradient(135deg, var(--card) 0%, var(--muted) 100%);
+  border: 2px dashed var(--border);
+  transition: all 0.3s ease;
+}
+
+.equipment-slot.filled {
+  border: 2px solid var(--secondary);
+  background: linear-gradient(135deg, var(--secondary) 0%, var(--accent) 100%);
+}
+
+.notification-badge {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.offline-modal {
+  backdrop-filter: blur(8px);
+  background: rgba(45, 74, 58, 0.9);
+}
