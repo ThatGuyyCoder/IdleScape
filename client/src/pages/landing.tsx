@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Hammer, Fish, TreePine, Flame, Star, Clock, TrendingUp } from "lucide-react";
 import { useLocation } from "wouter";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export default function Landing() {
   const [, setLocation] = useLocation();
@@ -16,6 +17,11 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-muted">
+      {/* Theme switcher in top right corner */}
+      <div className="absolute top-4 right-4">
+        <ThemeSwitcher />
+      </div>
+      
       <div className="container mx-auto px-4 py-16">
         {/* Header */}
         <header className="text-center mb-16">

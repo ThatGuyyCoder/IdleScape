@@ -52,8 +52,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return player.id;
     }
     
-    // Return default player for guests
-    return DEFAULT_PLAYER_ID;
+    // Return session-based player for guests to avoid data sharing
+    const sessionId = req.sessionID || 'fallback-guest';
+    const guestPlayerId = `guest-${sessionId}`;
+    
+    // Create guest player if it doesn't exist
+    let guestPlayer = await storage.getPlayer(guestPlayerId);
+    if (!guestPlayer) {
+      guestPlayer = await storage.createPlayerWithId(guestPlayerId, {
+        name: "Külaline",
+      });
+
+      // Initialize default skills for new guest
+      const skillTypes = ["mining", "fishing", "woodcutting", "cooking"];
+      for (const skillType of skillTypes) {
+        await storage.createOrUpdateSkill({
+          playerId: guestPlayer.id,
+          skillType,
+          level: 1,
+          experience: 0,
+          isActive: false,
+        });
+      }
+
+      // Initialize basic equipment slots
+      const equipmentSlots = [
+        { slot: "tool", itemType: null, efficiencyBonus: 0, experienceBonus: 0 },
+        { slot: "helmet", itemType: null, efficiencyBonus: 0, experienceBonus: 0 },
+        { slot: "gloves", itemType: null, efficiencyBonus: 0, experienceBonus: 0 },
+        { slot: "boots", itemType: null, efficiencyBonus: 0, experienceBonus: 0 },
+      ];
+      
+      for (const equip of equipmentSlots) {
+        await storage.updateEquipment(guestPlayer.id, equip.slot, equip);
+      }
+    }
+    
+    return guestPlayerId;
   };
 
   // Auth user endpoint  
@@ -205,7 +240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const levelUps = newLevel - oldLevel;
             
             // Update skill
-            await storage.updateSkill(DEFAULT_PLAYER_ID, skill.skillType, {
+            await storage.updateSkill(playerId, skill.skillType, {
               experience: newExp,
               level: newLevel,
               lastActionTime: new Date(),
@@ -213,10 +248,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             // Update inventory with gained items
             if (skill.currentResource && itemsGained > 0) {
-              const inventory = await storage.getPlayerInventory(DEFAULT_PLAYER_ID);
+              const inventory = await storage.getPlayerInventory(playerId);
               const existingItem = inventory.find(item => item.itemType === skill.currentResource);
               const newQuantity = (existingItem?.quantity || 0) + itemsGained;
-              await storage.updateInventoryItem(DEFAULT_PLAYER_ID, skill.currentResource, newQuantity);
+              await storage.updateInventoryItem(playerId, skill.currentResource, newQuantity);
             }
             
             progress.gains.push({
@@ -229,7 +264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      await storage.updatePlayerLastSeen(DEFAULT_PLAYER_ID);
+      await storage.updatePlayerLastSeen(playerId);
       res.json(progress);
     } catch (error) {
       res.status(500).json({ message: "Failed to calculate offline progress" });

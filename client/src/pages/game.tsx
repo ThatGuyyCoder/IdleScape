@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SkillCard } from "@/components/skill-card";
 import { ActiveTraining } from "@/components/active-training";
 import { Inventory } from "@/components/inventory";
@@ -133,6 +134,9 @@ export default function Game() {
                 </span>
               </Button>
               
+              {/* Theme Switcher */}
+              <ThemeSwitcher />
+              
               {/* User Menu */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -150,7 +154,7 @@ export default function Game() {
                     <>
                       <DropdownMenuItem disabled className="text-center">
                         <User className="w-4 h-4 mr-2" />
-                        {user?.email || "Logged In"}
+                        {(user as any)?.email || "Sisselogitud"}
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
