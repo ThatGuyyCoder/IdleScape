@@ -5,6 +5,12 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Skill, Equipment } from "@shared/schema";
 import { calculateLevel, getExperienceToNext } from "@/lib/game-engine";
+import { 
+  AnimatedMiningIcon, 
+  AnimatedFishingIcon, 
+  AnimatedWoodcuttingIcon, 
+  AnimatedCookingIcon 
+} from "@/components/animated-skill-icons";
 
 interface SkillCardProps {
   skill: Skill;
@@ -17,6 +23,13 @@ const skillIcons = {
   fishing: Fish,
   woodcutting: TreePine,
   cooking: Flame,
+};
+
+const animatedSkillIcons = {
+  mining: AnimatedMiningIcon,
+  fishing: AnimatedFishingIcon,
+  woodcutting: AnimatedWoodcuttingIcon,
+  cooking: AnimatedCookingIcon,
 };
 
 const skillColors = {
@@ -79,7 +92,10 @@ export function SkillCard({ skill, isActive, equipment }: SkillCardProps) {
     },
   });
 
-  const IconComponent = skillIcons[skill.skillType as keyof typeof skillIcons] || Hammer;
+  // Use animated icon when skill is active, otherwise use static icon
+  const IconComponent = isActive 
+    ? animatedSkillIcons[skill.skillType as keyof typeof animatedSkillIcons] || AnimatedMiningIcon
+    : skillIcons[skill.skillType as keyof typeof skillIcons] || Hammer;
   const skillColor = skillColors[skill.skillType as keyof typeof skillColors] || "bg-primary";
   const resources = skillResources[skill.skillType as keyof typeof skillResources] || [];
   

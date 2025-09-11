@@ -56,23 +56,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const sessionId = req.sessionID || 'fallback-guest';
     const guestPlayerId = `guest-${sessionId}`;
     
+    console.log(`[DEBUG] Guest session ID: ${sessionId}, Player ID: ${guestPlayerId}`);
+    
     // Create guest player if it doesn't exist
     let guestPlayer = await storage.getPlayer(guestPlayerId);
+    console.log(`[DEBUG] Found existing guest player: ${!!guestPlayer}`);
+    
     if (!guestPlayer) {
+      console.log(`[DEBUG] Creating new guest player: ${guestPlayerId}`);
       guestPlayer = await storage.createPlayerWithId(guestPlayerId, {
         name: "Külaline",
       });
 
+      console.log(`[DEBUG] Created guest player: ${guestPlayer.id}`);
+
       // Initialize default skills for new guest
       const skillTypes = ["mining", "fishing", "woodcutting", "cooking"];
       for (const skillType of skillTypes) {
-        await storage.createOrUpdateSkill({
-          playerId: guestPlayer.id,
-          skillType,
-          level: 1,
-          experience: 0,
-          isActive: false,
-        });
+        try {
+          console.log(`[DEBUG] Creating skill: ${skillType} for player: ${guestPlayer.id}`);
+          await storage.createOrUpdateSkill({
+            playerId: guestPlayer.id,
+            skillType,
+            level: 1,
+            experience: 0,
+            isActive: false,
+          });
+          console.log(`[DEBUG] Successfully created skill: ${skillType}`);
+        } catch (error) {
+          console.error(`[ERROR] Failed to create skill ${skillType} for player ${guestPlayer.id}:`, error);
+          throw error;
+        }
       }
 
       // Initialize basic equipment slots
@@ -84,8 +98,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
       
       for (const equip of equipmentSlots) {
-        await storage.updateEquipment(guestPlayer.id, equip.slot, equip);
+        try {
+          console.log(`[DEBUG] Creating equipment slot: ${equip.slot} for player: ${guestPlayer.id}`);
+          await storage.updateEquipment(guestPlayer.id, equip.slot, equip);
+          console.log(`[DEBUG] Successfully created equipment slot: ${equip.slot}`);
+        } catch (error) {
+          console.error(`[ERROR] Failed to create equipment slot ${equip.slot} for player ${guestPlayer.id}:`, error);
+          throw error;
+        }
       }
+      
+      console.log(`[DEBUG] Finished initializing guest player: ${guestPlayer.id}`);
     }
     
     return guestPlayerId;
