@@ -3,19 +3,81 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { startSkillTrainingSchema } from "@shared/schema";
 import { z } from "zod";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   const DEFAULT_PLAYER_ID = "default-player";
 
-  // Get player data
-  app.get("/api/player", async (req, res) => {
+  // Setup authentication
+  await setupAuth(app);
+
+  // Helper function to get player ID based on authentication
+  const getPlayerId = async (req: any): Promise<string> => {
+    if (req.isAuthenticated() && req.user?.claims?.sub) {
+      const userId = req.user.claims.sub;
+      // Try to find existing player for this user
+      let player = await storage.getPlayer(`user-${userId}`);
+      
+      if (!player) {
+        // Create new player for authenticated user
+        player = await storage.createPlayerWithId(`user-${userId}`, {
+          name: req.user.claims.email?.split('@')[0] || "Adventurer",
+        });
+
+        // Initialize default skills for new user
+        const skillTypes = ["mining", "fishing", "woodcutting", "cooking"];
+        for (const skillType of skillTypes) {
+          await storage.createOrUpdateSkill({
+            playerId: player.id,
+            skillType,
+            level: 1,
+            experience: 0,
+            isActive: false,
+          });
+        }
+
+        // Initialize basic equipment slots
+        const equipmentSlots = [
+          { slot: "tool", itemType: null, efficiencyBonus: 0, experienceBonus: 0 },
+          { slot: "helmet", itemType: null, efficiencyBonus: 0, experienceBonus: 0 },
+          { slot: "gloves", itemType: null, efficiencyBonus: 0, experienceBonus: 0 },
+          { slot: "boots", itemType: null, efficiencyBonus: 0, experienceBonus: 0 },
+        ];
+        
+        for (const equip of equipmentSlots) {
+          await storage.updateEquipment(player.id, equip.slot, equip);
+        }
+      }
+      
+      return player.id;
+    }
+    
+    // Return default player for guests
+    return DEFAULT_PLAYER_ID;
+  };
+
+  // Auth user endpoint  
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const player = await storage.getPlayer(DEFAULT_PLAYER_ID);
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Get player data
+  app.get("/api/player", async (req: any, res) => {
+    try {
+      const playerId = await getPlayerId(req);
+      const player = await storage.getPlayer(playerId);
       if (!player) {
         return res.status(404).json({ message: "Player not found" });
       }
       
-      await storage.updatePlayerLastSeen(DEFAULT_PLAYER_ID);
+      await storage.updatePlayerLastSeen(playerId);
       res.json(player);
     } catch (error) {
       res.status(500).json({ message: "Failed to get player data" });
@@ -23,9 +85,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get player skills
-  app.get("/api/skills", async (req, res) => {
+  app.get("/api/skills", async (req: any, res) => {
     try {
-      const skills = await storage.getPlayerSkills(DEFAULT_PLAYER_ID);
+      const playerId = await getPlayerId(req);
+      const skills = await storage.getPlayerSkills(playerId);
       res.json(skills);
     } catch (error) {
       res.status(500).json({ message: "Failed to get skills data" });
@@ -33,15 +96,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Start skill training
-  app.post("/api/skills/start", async (req, res) => {
+  app.post("/api/skills/start", async (req: any, res) => {
     try {
+      const playerId = await getPlayerId(req);
       const { skillType, resourceType } = startSkillTrainingSchema.parse(req.body);
       
       // Stop all other active training
-      const allSkills = await storage.getPlayerSkills(DEFAULT_PLAYER_ID);
+      const allSkills = await storage.getPlayerSkills(playerId);
       for (const skill of allSkills) {
         if (skill.isActive) {
-          await storage.updateSkill(DEFAULT_PLAYER_ID, skill.skillType, {
+          await storage.updateSkill(playerId, skill.skillType, {
             isActive: false,
             lastActionTime: new Date(),
           });
@@ -49,7 +113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Start the new skill training
-      const updatedSkill = await storage.updateSkill(DEFAULT_PLAYER_ID, skillType, {
+      const updatedSkill = await storage.updateSkill(playerId, skillType, {
         isActive: true,
         currentResource: resourceType,
         lastActionTime: new Date(),
@@ -69,11 +133,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Stop skill training
-  app.post("/api/skills/stop", async (req, res) => {
+  app.post("/api/skills/stop", async (req: any, res) => {
     try {
+      const playerId = await getPlayerId(req);
       const { skillType } = z.object({ skillType: z.string() }).parse(req.body);
       
-      const updatedSkill = await storage.updateSkill(DEFAULT_PLAYER_ID, skillType, {
+      const updatedSkill = await storage.updateSkill(playerId, skillType, {
         isActive: false,
         lastActionTime: new Date(),
       });
@@ -92,15 +157,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Calculate and apply offline progress
-  app.post("/api/offline-progress", async (req, res) => {
+  app.post("/api/offline-progress", async (req: any, res) => {
     try {
-      const player = await storage.getPlayer(DEFAULT_PLAYER_ID);
+      const playerId = await getPlayerId(req);
+      const player = await storage.getPlayer(playerId);
       if (!player) {
         return res.status(404).json({ message: "Player not found" });
       }
 
-      const skills = await storage.getPlayerSkills(DEFAULT_PLAYER_ID);
-      const equipment = await storage.getPlayerEquipment(DEFAULT_PLAYER_ID);
+      const skills = await storage.getPlayerSkills(playerId);
+      const equipment = await storage.getPlayerEquipment(playerId);
       
       const offlineTime = Date.now() - player.lastSeen.getTime();
       const offlineMinutes = Math.floor(offlineTime / (1000 * 60));
@@ -171,9 +237,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get inventory
-  app.get("/api/inventory", async (req, res) => {
+  app.get("/api/inventory", async (req: any, res) => {
     try {
-      const inventory = await storage.getPlayerInventory(DEFAULT_PLAYER_ID);
+      const playerId = await getPlayerId(req);
+      const inventory = await storage.getPlayerInventory(playerId);
       res.json(inventory);
     } catch (error) {
       res.status(500).json({ message: "Failed to get inventory data" });
@@ -181,9 +248,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get equipment
-  app.get("/api/equipment", async (req, res) => {
+  app.get("/api/equipment", async (req: any, res) => {
     try {
-      const equipment = await storage.getPlayerEquipment(DEFAULT_PLAYER_ID);
+      const playerId = await getPlayerId(req);
+      const equipment = await storage.getPlayerEquipment(playerId);
       res.json(equipment);
     } catch (error) {
       res.status(500).json({ message: "Failed to get equipment data" });

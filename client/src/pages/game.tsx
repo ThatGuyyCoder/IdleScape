@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Bell, Cog, User, Star, Clock } from "lucide-react";
+import { Bell, Cog, User, Star, Clock, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "wouter";
 import { SkillCard } from "@/components/skill-card";
 import { ActiveTraining } from "@/components/active-training";
 import { Inventory } from "@/components/inventory";
@@ -14,6 +17,8 @@ import type { Player, Skill, InventoryItem, Equipment as EquipmentType } from "@
 export default function Game() {
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [offlineProgress, setOfflineProgress] = useState<any>(null);
+  const { user, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
 
   const { data: player, isLoading: playerLoading } = useQuery<Player>({
     queryKey: ["/api/player"],
@@ -127,14 +132,53 @@ export default function Game() {
                   3
                 </span>
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-muted-foreground hover:text-foreground"
-                data-testid="settings-button"
-              >
-                <Cog className="w-5 h-5" />
-              </Button>
+              
+              {/* User Menu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-foreground"
+                    data-testid="user-menu"
+                  >
+                    <User className="w-5 h-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  {isAuthenticated ? (
+                    <>
+                      <DropdownMenuItem disabled className="text-center">
+                        <User className="w-4 h-4 mr-2" />
+                        {user?.email || "Logged In"}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={() => window.location.href = "/api/logout"}
+                        data-testid="logout-button"
+                      >
+                        <LogOut className="w-4 h-4 mr-2" />
+                        Log Out
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuItem disabled className="text-center">
+                        <User className="w-4 h-4 mr-2" />
+                        Guest Player
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={() => setLocation("/landing")}
+                        data-testid="login-link"
+                      >
+                        <User className="w-4 h-4 mr-2" />
+                        Log In to Save Progress
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </div>

@@ -1,4 +1,6 @@
 import { 
+  type User,
+  type UpsertUser,
   type Player, 
   type InsertPlayer,
   type Skill,
@@ -7,6 +9,7 @@ import {
   type InsertInventoryItem,
   type Equipment,
   type InsertEquipment,
+  users,
   players,
   skills,
   inventory,
@@ -16,9 +19,14 @@ import { db } from "./db";
 import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
+  // User operations (for Replit Auth)
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
   // Player operations
   getPlayer(id: string): Promise<Player | undefined>;
   createPlayer(player: InsertPlayer): Promise<Player>;
+  createPlayerWithId(id: string, player: InsertPlayer): Promise<Player>;
   updatePlayerLastSeen(id: string): Promise<void>;
   
   // Skill operations
@@ -109,13 +117,43 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // User operations (for Replit Auth)
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user || undefined;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
   async getPlayer(id: string): Promise<Player | undefined> {
     const [player] = await db.select().from(players).where(eq(players.id, id));
     return player || undefined;
   }
 
+
   async createPlayer(insertPlayer: InsertPlayer): Promise<Player> {
     const [player] = await db.insert(players).values(insertPlayer).returning();
+    return player;
+  }
+
+  async createPlayerWithId(id: string, insertPlayer: InsertPlayer): Promise<Player> {
+    const [player] = await db.insert(players).values({
+      ...insertPlayer,
+      id,
+    }).returning();
     return player;
   }
 
