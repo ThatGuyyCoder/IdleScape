@@ -6,9 +6,14 @@ import {
   type InventoryItem,
   type InsertInventoryItem,
   type Equipment,
-  type InsertEquipment
+  type InsertEquipment,
+  players,
+  skills,
+  inventory,
+  equipment
 } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { db } from "./db";
+import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
   // Player operations
@@ -30,38 +35,35 @@ export interface IStorage {
   updateEquipment(playerId: string, slot: string, equipment: Partial<Equipment>): Promise<Equipment>;
 }
 
-export class MemStorage implements IStorage {
-  private players: Map<string, Player>;
-  private skills: Map<string, Skill>;
-  private inventory: Map<string, InventoryItem>;
-  private equipment: Map<string, Equipment>;
+export class DatabaseStorage implements IStorage {
+  private initializationPromise: Promise<void>;
 
   constructor() {
-    this.players = new Map();
-    this.skills = new Map();
-    this.inventory = new Map();
-    this.equipment = new Map();
-    
-    // Initialize default player
-    this.initializeDefaultPlayer();
+    // Initialize default player if needed
+    this.initializationPromise = this.initializeDefaultPlayer();
+  }
+
+  async ready(): Promise<void> {
+    await this.initializationPromise;
   }
 
   private async initializeDefaultPlayer() {
     const defaultPlayerId = "default-player";
-    const defaultPlayer: Player = {
+    
+    // Check if default player exists
+    const existingPlayer = await this.getPlayer(defaultPlayerId);
+    if (existingPlayer) return;
+
+    // Create default player
+    const defaultPlayer = await db.insert(players).values({
       id: defaultPlayerId,
       name: "Adventurer",
-      lastSeen: new Date(),
-      createdAt: new Date(),
-    };
-    
-    this.players.set(defaultPlayerId, defaultPlayer);
-    
+    }).returning();
+
     // Initialize default skills
     const skillTypes = ["mining", "fishing", "woodcutting", "cooking"];
     for (const skillType of skillTypes) {
-      const skill: Skill = {
-        id: randomUUID(),
+      await db.insert(skills).values({
         playerId: defaultPlayerId,
         skillType,
         level: skillType === "mining" ? 15 : skillType === "woodcutting" ? 12 : skillType === "fishing" ? 8 : 6,
@@ -69,8 +71,7 @@ export class MemStorage implements IStorage {
         isActive: skillType === "mining",
         lastActionTime: skillType === "mining" ? new Date(Date.now() - 2 * 60 * 1000) : null,
         currentResource: skillType === "mining" ? "iron_ore" : null,
-      };
-      this.skills.set(`${defaultPlayerId}-${skillType}`, skill);
+      });
     }
     
     // Initialize inventory items
@@ -82,14 +83,11 @@ export class MemStorage implements IStorage {
     ];
     
     for (const item of inventoryItems) {
-      const inventoryItem: InventoryItem = {
-        id: randomUUID(),
+      await db.insert(inventory).values({
         playerId: defaultPlayerId,
         itemType: item.itemType,
         quantity: item.quantity,
-        updatedAt: new Date(),
-      };
-      this.inventory.set(`${defaultPlayerId}-${item.itemType}`, inventoryItem);
+      });
     }
     
     // Initialize equipment
@@ -101,127 +99,101 @@ export class MemStorage implements IStorage {
     ];
     
     for (const equip of equipmentSlots) {
-      const equipment: Equipment = {
-        id: randomUUID(),
+      await db.insert(equipment).values({
         playerId: defaultPlayerId,
         slot: equip.slot,
         itemType: equip.itemType,
         efficiencyBonus: equip.efficiencyBonus,
         experienceBonus: equip.experienceBonus,
-      };
-      this.equipment.set(`${defaultPlayerId}-${equip.slot}`, equipment);
+      });
     }
   }
 
   async getPlayer(id: string): Promise<Player | undefined> {
-    return this.players.get(id);
+    const [player] = await db.select().from(players).where(eq(players.id, id));
+    return player || undefined;
   }
 
   async createPlayer(insertPlayer: InsertPlayer): Promise<Player> {
-    const id = randomUUID();
-    const player: Player = { 
-      ...insertPlayer, 
-      id,
-      createdAt: new Date(),
-      lastSeen: new Date(),
-    };
-    this.players.set(id, player);
+    const [player] = await db.insert(players).values(insertPlayer).returning();
     return player;
   }
 
   async updatePlayerLastSeen(id: string): Promise<void> {
-    const player = this.players.get(id);
-    if (player) {
-      player.lastSeen = new Date();
-      this.players.set(id, player);
-    }
+    await db.update(players)
+      .set({ lastSeen: new Date() })
+      .where(eq(players.id, id));
   }
 
   async getPlayerSkills(playerId: string): Promise<Skill[]> {
-    return Array.from(this.skills.values()).filter(skill => skill.playerId === playerId);
+    return await db.select().from(skills).where(eq(skills.playerId, playerId));
   }
 
   async updateSkill(playerId: string, skillType: string, updates: Partial<Skill>): Promise<Skill | undefined> {
-    const key = `${playerId}-${skillType}`;
-    const skill = this.skills.get(key);
-    if (skill) {
-      const updatedSkill = { ...skill, ...updates };
-      this.skills.set(key, updatedSkill);
-      return updatedSkill;
-    }
-    return undefined;
+    const [updated] = await db.update(skills)
+      .set(updates)
+      .where(and(eq(skills.playerId, playerId), eq(skills.skillType, skillType)))
+      .returning();
+    return updated || undefined;
   }
 
   async createOrUpdateSkill(insertSkill: InsertSkill): Promise<Skill> {
-    const key = `${insertSkill.playerId}-${insertSkill.skillType}`;
-    const existing = this.skills.get(key);
-    
-    if (existing) {
-      const updated = { ...existing, ...insertSkill };
-      this.skills.set(key, updated);
-      return updated;
-    } else {
-      const skill: Skill = {
-        id: randomUUID(),
-        ...insertSkill,
-      };
-      this.skills.set(key, skill);
-      return skill;
-    }
+    const [result] = await db
+      .insert(skills)
+      .values(insertSkill)
+      .onConflictDoUpdate({
+        target: [skills.playerId, skills.skillType],
+        set: insertSkill,
+      })
+      .returning();
+    return result;
   }
 
   async getPlayerInventory(playerId: string): Promise<InventoryItem[]> {
-    return Array.from(this.inventory.values()).filter(item => item.playerId === playerId);
+    return await db.select().from(inventory).where(eq(inventory.playerId, playerId));
   }
 
   async updateInventoryItem(playerId: string, itemType: string, quantity: number): Promise<InventoryItem> {
-    const key = `${playerId}-${itemType}`;
-    const existing = this.inventory.get(key);
-    
-    if (existing) {
-      existing.quantity = quantity;
-      existing.updatedAt = new Date();
-      this.inventory.set(key, existing);
-      return existing;
-    } else {
-      const item: InventoryItem = {
-        id: randomUUID(),
+    const [result] = await db
+      .insert(inventory)
+      .values({
         playerId,
         itemType,
         quantity,
-        updatedAt: new Date(),
-      };
-      this.inventory.set(key, item);
-      return item;
-    }
+      })
+      .onConflictDoUpdate({
+        target: [inventory.playerId, inventory.itemType],
+        set: {
+          quantity,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return result;
   }
 
   async getPlayerEquipment(playerId: string): Promise<Equipment[]> {
-    return Array.from(this.equipment.values()).filter(equip => equip.playerId === playerId);
+    return await db.select().from(equipment).where(eq(equipment.playerId, playerId));
   }
 
   async updateEquipment(playerId: string, slot: string, updates: Partial<Equipment>): Promise<Equipment> {
-    const key = `${playerId}-${slot}`;
-    const existing = this.equipment.get(key);
-    
-    if (existing) {
-      const updated = { ...existing, ...updates };
-      this.equipment.set(key, updated);
-      return updated;
-    } else {
-      const equipment: Equipment = {
-        id: randomUUID(),
+    const [result] = await db
+      .insert(equipment)
+      .values({
         playerId,
         slot,
         itemType: null,
         efficiencyBonus: 0,
         experienceBonus: 0,
         ...updates,
-      };
-      this.equipment.set(key, equipment);
-      return equipment;
-    }
+      })
+      .onConflictDoUpdate({
+        target: [equipment.playerId, equipment.slot],
+        set: updates,
+      })
+      .returning();
+    return result;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

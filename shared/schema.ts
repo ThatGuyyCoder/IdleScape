@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, jsonb, timestamp, boolean, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -19,7 +19,9 @@ export const skills = pgTable("skills", {
   isActive: boolean("is_active").notNull().default(false),
   lastActionTime: timestamp("last_action_time"),
   currentResource: text("current_resource"), // what they're currently working on
-});
+}, (table) => ({
+  playerSkillUnique: unique().on(table.playerId, table.skillType),
+}));
 
 export const inventory = pgTable("inventory", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -27,7 +29,9 @@ export const inventory = pgTable("inventory", {
   itemType: text("item_type").notNull(),
   quantity: integer("quantity").notNull().default(0),
   updatedAt: timestamp("updated_at").notNull().default(sql`now()`),
-});
+}, (table) => ({
+  playerItemUnique: unique().on(table.playerId, table.itemType),
+}));
 
 export const equipment = pgTable("equipment", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -36,7 +40,9 @@ export const equipment = pgTable("equipment", {
   itemType: text("item_type"),
   efficiencyBonus: integer("efficiency_bonus").notNull().default(0),
   experienceBonus: integer("experience_bonus").notNull().default(0),
-});
+}, (table) => ({
+  playerSlotUnique: unique().on(table.playerId, table.slot),
+}));
 
 // Game configuration schemas
 export const skillConfigSchema = z.object({
