@@ -11,6 +11,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication
   await setupAuth(app);
 
+  // Helper function to generate a guest number
+  const generateGuestNumber = async (): Promise<number> => {
+    // Get all existing guest players and find the highest number
+    const allPlayers = await storage.getAllPlayers?.() || [];
+    const guestPlayers = allPlayers.filter(p => p.id.startsWith('guest-') && p.id.match(/guest-\d+$/));
+    
+    // Extract numbers and find the highest
+    const guestNumbers = guestPlayers
+      .map(p => parseInt(p.id.replace('guest-', '')))
+      .filter(n => !isNaN(n));
+    
+    const highestNumber = Math.max(0, ...guestNumbers);
+    return highestNumber + 1;
+  };
+
   // Helper function to get player ID based on authentication
   const getPlayerId = async (req: any): Promise<string> => {
     if (req.isAuthenticated() && req.user?.claims?.sub) {
@@ -53,20 +68,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     
     // Return session-based player for guests to avoid data sharing
-    const sessionId = req.sessionID || 'fallback-guest';
-    const guestPlayerId = `guest-${sessionId}`;
+    // Check if we already have a guest player ID in the session
+    if (req.session.guestPlayerId) {
+      const existingPlayer = await storage.getPlayer(req.session.guestPlayerId);
+      if (existingPlayer) {
+        console.log(`[DEBUG] Found existing guest player from session: ${req.session.guestPlayerId}`);
+        return req.session.guestPlayerId;
+      }
+    }
     
-    console.log(`[DEBUG] Guest session ID: ${sessionId}, Player ID: ${guestPlayerId}`);
+    // Generate a new guest number for new players
+    const guestNumber = await generateGuestNumber();
+    const guestPlayerId = `guest-${guestNumber}`;
     
-    // Create guest player if it doesn't exist
-    let guestPlayer = await storage.getPlayer(guestPlayerId);
-    console.log(`[DEBUG] Found existing guest player: ${!!guestPlayer}`);
+    console.log(`[DEBUG] Creating new guest player: ${guestPlayerId} with number: ${guestNumber}`);
+    const guestPlayer = await storage.createPlayerWithId(guestPlayerId, {
+      name: `Guest #${guestNumber}`,
+    });
     
-    if (!guestPlayer) {
-      console.log(`[DEBUG] Creating new guest player: ${guestPlayerId}`);
-      guestPlayer = await storage.createPlayerWithId(guestPlayerId, {
-        name: "Külaline",
-      });
+    // Store the guest player ID in the session
+    req.session.guestPlayerId = guestPlayerId;
 
       console.log(`[DEBUG] Created guest player: ${guestPlayer.id}`);
 
@@ -109,9 +130,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       console.log(`[DEBUG] Finished initializing guest player: ${guestPlayer.id}`);
-    }
-    
-    return guestPlayerId;
+      
+      return guestPlayerId;
   };
 
   // Auth user endpoint  
