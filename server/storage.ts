@@ -29,6 +29,7 @@ export interface IStorage {
   createPlayer(player: InsertPlayer): Promise<Player>;
   createPlayerWithId(id: string, player: InsertPlayer): Promise<Player>;
   updatePlayerLastSeen(id: string): Promise<void>;
+  transferGuestProgress(guestPlayerId: string, targetPlayerId: string): Promise<void>;
   
   // Skill operations
   getPlayerSkills(playerId: string): Promise<Skill[]>;
@@ -236,6 +237,99 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return result;
+  }
+
+  async transferGuestProgress(guestPlayerId: string, targetPlayerId: string): Promise<void> {
+    // Get guest player data
+    const guestPlayer = await this.getPlayer(guestPlayerId);
+    if (!guestPlayer) {
+      throw new Error(`Guest player ${guestPlayerId} not found`);
+    }
+
+    // Get guest skills, inventory, and equipment
+    const guestSkills = await this.getPlayerSkills(guestPlayerId);
+    const guestInventory = await this.getPlayerInventory(guestPlayerId);
+    const guestEquipment = await this.getPlayerEquipment(guestPlayerId);
+
+    // Transfer skills (only if guest has higher level/experience)
+    for (const guestSkill of guestSkills) {
+      const currentSkill = await db
+        .select()
+        .from(skills)
+        .where(and(eq(skills.playerId, targetPlayerId), eq(skills.skillType, guestSkill.skillType)));
+
+      if (currentSkill.length === 0) {
+        // No existing skill, create it
+        await this.createOrUpdateSkill({
+          playerId: targetPlayerId,
+          skillType: guestSkill.skillType,
+          level: guestSkill.level,
+          experience: guestSkill.experience,
+          isActive: guestSkill.isActive,
+          lastActionTime: guestSkill.lastActionTime,
+          currentResource: guestSkill.currentResource,
+        });
+      } else {
+        // Compare levels and transfer if guest is higher
+        const existing = currentSkill[0];
+        if (guestSkill.level > existing.level || 
+            (guestSkill.level === existing.level && guestSkill.experience > existing.experience)) {
+          await this.updateSkill(targetPlayerId, guestSkill.skillType, {
+            level: guestSkill.level,
+            experience: guestSkill.experience,
+            isActive: guestSkill.isActive,
+            lastActionTime: guestSkill.lastActionTime,
+            currentResource: guestSkill.currentResource,
+          });
+        }
+      }
+    }
+
+    // Transfer inventory (add quantities together)
+    for (const guestItem of guestInventory) {
+      const existingQuantity = await db
+        .select()
+        .from(inventory)
+        .where(and(eq(inventory.playerId, targetPlayerId), eq(inventory.itemType, guestItem.itemType)));
+
+      const newQuantity = existingQuantity.length > 0 
+        ? existingQuantity[0].quantity + guestItem.quantity 
+        : guestItem.quantity;
+
+      await this.updateInventoryItem(targetPlayerId, guestItem.itemType, newQuantity);
+    }
+
+    // Transfer equipment (only if guest has better equipment)
+    for (const guestEquip of guestEquipment) {
+      const currentEquip = await db
+        .select()
+        .from(equipment)
+        .where(and(eq(equipment.playerId, targetPlayerId), eq(equipment.slot, guestEquip.slot)));
+
+      if (currentEquip.length === 0) {
+        // No existing equipment, transfer it
+        await this.updateEquipment(targetPlayerId, guestEquip.slot, {
+          itemType: guestEquip.itemType,
+          efficiencyBonus: guestEquip.efficiencyBonus,
+          experienceBonus: guestEquip.experienceBonus,
+        });
+      } else {
+        // Compare bonuses and transfer if guest has better equipment
+        const existing = currentEquip[0];
+        const guestTotal = guestEquip.efficiencyBonus + guestEquip.experienceBonus;
+        const existingTotal = existing.efficiencyBonus + existing.experienceBonus;
+        
+        if (guestTotal > existingTotal) {
+          await this.updateEquipment(targetPlayerId, guestEquip.slot, {
+            itemType: guestEquip.itemType,
+            efficiencyBonus: guestEquip.efficiencyBonus,
+            experienceBonus: guestEquip.experienceBonus,
+          });
+        }
+      }
+    }
+
+    console.log(`[DEBUG] Successfully transferred progress from ${guestPlayerId} to ${targetPlayerId}`);
   }
 }
 

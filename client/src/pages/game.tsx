@@ -12,12 +12,14 @@ import { Inventory } from "@/components/inventory";
 import { Equipment } from "@/components/equipment";
 import { Statistics } from "@/components/statistics";
 import { OfflineProgressModal } from "@/components/offline-progress-modal";
+import { SaveProgressNotification } from "@/components/save-progress-notification";
 import { calculateOfflineProgress } from "@/lib/offline-progress";
 import type { Player, Skill, InventoryItem, Equipment as EquipmentType } from "@shared/schema";
 
 export default function Game() {
   const [showOfflineModal, setShowOfflineModal] = useState(false);
   const [offlineProgress, setOfflineProgress] = useState<any>(null);
+  const [showSaveProgress, setShowSaveProgress] = useState(false);
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -69,6 +71,15 @@ export default function Game() {
       checkOfflineProgress();
     }
   }, [player]);
+
+  // Check if authenticated user should see save progress notification
+  useEffect(() => {
+    if (isAuthenticated && player) {
+      // Show save progress notification for authenticated users
+      // This will trigger the notification to check if there's guest progress to transfer
+      setShowSaveProgress(true);
+    }
+  }, [isAuthenticated, player]);
 
   // Update last seen timestamp periodically
   useEffect(() => {
@@ -187,6 +198,13 @@ export default function Game() {
           </div>
         </div>
       </header>
+
+      {/* Save Progress Notification for authenticated users */}
+      {showSaveProgress && isAuthenticated && (
+        <SaveProgressNotification 
+          onDismiss={() => setShowSaveProgress(false)} 
+        />
+      )}
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
