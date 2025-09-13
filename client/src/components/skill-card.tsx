@@ -103,7 +103,7 @@ export function SkillCard({ skill, isActive, equipment }: SkillCardProps) {
   const totalExpBonus = equipment.reduce((acc, equip) => acc + equip.experienceBonus, 0);
   const expPerAction = getBaseExpForSkill(skill.skillType) * (1 + totalExpBonus / 100);
   
-  const currentLevel = skill.level;
+  const currentLevel = calculateLevel(skill.experience); // Use calculated level instead of database level
   const expToNext = getExperienceToNext(skill.experience);
   const progressPercent = Math.min(((skill.experience - getExperienceForLevel(currentLevel)) / 
     (getExperienceForLevel(currentLevel + 1) - getExperienceForLevel(currentLevel))) * 100, 100);

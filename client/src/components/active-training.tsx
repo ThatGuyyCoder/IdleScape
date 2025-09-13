@@ -5,7 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import type { Skill, Equipment } from "@shared/schema";
-import { getExperienceToNext } from "@/lib/game-engine";
+import { getExperienceToNext, calculateLevel } from "@/lib/game-engine";
 
 interface ActiveTrainingProps {
   skill: Skill;
@@ -94,7 +94,7 @@ export function ActiveTraining({ skill, equipment }: ActiveTrainingProps) {
   const baseExp = getBaseExpForSkill(skill.skillType);
   const expPerAction = Math.floor(baseExp * (1 + totalExpBonus / 100));
   
-  const currentLevel = skill.level;
+  const currentLevel = calculateLevel(skill.experience); // Use calculated level instead of database level
   const expToNext = getExperienceToNext(skill.experience);
   const progressPercent = Math.min(((skill.experience - getExperienceForLevel(currentLevel)) / 
     (getExperienceForLevel(currentLevel + 1) - getExperienceForLevel(currentLevel))) * 100, 100);
