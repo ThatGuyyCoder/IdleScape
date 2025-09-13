@@ -6,6 +6,7 @@ import session from "express-session";
 import type { Express, RequestHandler } from "express";
 import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
+import MemoryStore from "memorystore";
 import { storage } from "./storage";
 
 if (!process.env.REPLIT_DOMAINS) {
@@ -24,13 +25,28 @@ const getOidcConfig = memoize(
 
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
-  const pgStore = connectPg(session);
-  const sessionStore = new pgStore({
-    conString: process.env.DATABASE_URL,
-    createTableIfMissing: false,
-    ttl: sessionTtl,
-    tableName: "sessions",
-  });
+  
+  // Use memory-backed sessions for development for reliability
+  // Switch to PostgreSQL for production if needed
+  let sessionStore;
+  
+  if (process.env.NODE_ENV === 'production') {
+    // Use PostgreSQL sessions in production
+    const pgStore = connectPg(session);
+    sessionStore = new pgStore({
+      conString: process.env.DATABASE_URL,
+      createTableIfMissing: true, // Allow table creation in production
+      ttl: sessionTtl,
+      tableName: "sessions",
+    });
+  } else {
+    // Use memory sessions for development
+    const memoryStore = MemoryStore(session);
+    sessionStore = new memoryStore({
+      checkPeriod: sessionTtl, // Prune expired entries every ttl
+    });
+  }
+  
   return session({
     secret: process.env.SESSION_SECRET!,
     store: sessionStore,
@@ -111,7 +127,7 @@ export async function setupAuth(app: Express) {
 
   app.get("/api/callback", (req, res, next) => {
     passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
+      successReturnToOrRedirect: "/game",
       failureRedirect: "/api/login",
     })(req, res, next);
   });
