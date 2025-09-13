@@ -12,7 +12,7 @@ export default function Landing() {
   };
 
   const handlePlayAsGuest = () => {
-    setLocation("/");
+    setLocation("/game");
   };
 
   return (
