@@ -149,8 +149,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Real-time skill progress tick
   app.post("/api/skills/tick", async (req: any, res) => {
     try {
+      console.log("[DEBUG] Tick endpoint called!");
       const playerId = await getPlayerId(req);
+      console.log("[DEBUG] Player ID:", playerId);
       const skills = await storage.getPlayerSkills(playerId);
+      console.log("[DEBUG] Skills count:", skills.length);
       const equipment = await storage.getPlayerEquipment(playerId);
       
       const now = Date.now();
@@ -160,6 +163,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const skill of skills) {
         if (skill.isActive && skill.lastActionTime) {
           const elapsedSeconds = Math.floor((now - skill.lastActionTime.getTime()) / 1000);
+          console.log(`[DEBUG] Tick for ${skill.skillType}: elapsedSeconds=${elapsedSeconds}, lastActionTime=${skill.lastActionTime}, now=${new Date(now)}`);
           
           if (elapsedSeconds >= 1) {
             // Calculate equipment bonuses
@@ -174,36 +178,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const baseExpPerSec = getSkillExpRate(skill.skillType) / 60;
             const baseItemsPerSec = (0.8 * efficiencyBonus) / 60;
             
-            const expGained = Math.floor(elapsedSeconds * baseExpPerSec * expBonus);
-            const itemsGained = Math.floor(elapsedSeconds * baseItemsPerSec);
+            const expFloat = elapsedSeconds * baseExpPerSec * expBonus;
+            const itemsFloat = elapsedSeconds * baseItemsPerSec;
+            const expGained = Math.floor(expFloat);
+            const itemsGained = Math.floor(itemsFloat);
             
-            const oldLevel = calculateLevel(skill.experience);
-            const newExp = skill.experience + expGained;
-            const newLevel = calculateLevel(newExp);
-            const levelUps = newLevel - oldLevel;
+            console.log(`[DEBUG] Calculation for ${skill.skillType}: expFloat=${expFloat}, itemsFloat=${itemsFloat}, expGained=${expGained}, itemsGained=${itemsGained}`);
             
-            // Update skill
-            await storage.updateSkill(playerId, skill.skillType, {
-              experience: newExp,
-              level: newLevel,
-              lastActionTime: new Date(),
-            });
-            
-            // Update inventory with gained items
-            if (skill.currentResource && itemsGained > 0) {
-              const inventory = await storage.getPlayerInventory(playerId);
-              const existingItem = inventory.find(item => item.itemType === skill.currentResource);
-              const newQuantity = (existingItem?.quantity || 0) + itemsGained;
-              await storage.updateInventoryItem(playerId, skill.currentResource, newQuantity);
-            }
-            
+            // Only update if we actually gained something, otherwise let elapsedSeconds accumulate
             if (expGained > 0 || itemsGained > 0) {
-              gains.push({
-                skill: skill.skillType,
-                expGained,
-                itemsGained,
-                levelUps,
+              const oldLevel = calculateLevel(skill.experience);
+              const newExp = skill.experience + expGained;
+              const newLevel = calculateLevel(newExp);
+              const levelUps = newLevel - oldLevel;
+              
+              // Update skill
+              await storage.updateSkill(playerId, skill.skillType, {
+                experience: newExp,
+                level: newLevel,
+                lastActionTime: new Date(),
               });
+            
+              // Update inventory with gained items
+              if (skill.currentResource && itemsGained > 0) {
+                const inventory = await storage.getPlayerInventory(playerId);
+                const existingItem = inventory.find(item => item.itemType === skill.currentResource);
+                const newQuantity = (existingItem?.quantity || 0) + itemsGained;
+                await storage.updateInventoryItem(playerId, skill.currentResource, newQuantity);
+              }
+              
+              if (expGained > 0 || itemsGained > 0) {
+                gains.push({
+                  skill: skill.skillType,
+                  expGained,
+                  itemsGained,
+                  levelUps,
+                });
+              }
             }
           }
         }
@@ -473,12 +484,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 }
 
 function getSkillExpRate(skillType: string): number {
+  // Increased rates to make progression visible in real-time (per minute)
   switch (skillType) {
-    case "mining": return 2.3;
-    case "fishing": return 1.8;
-    case "woodcutting": return 2.0;
-    case "cooking": return 1.5;
-    default: return 1.0;
+    case "mining": return 30; // Was 2.3, now 0.5 XP/sec = visible in 2 seconds
+    case "fishing": return 24; // Was 1.8, now 0.4 XP/sec
+    case "woodcutting": return 27; // Was 2.0, now 0.45 XP/sec  
+    case "cooking": return 21; // Was 1.5, now 0.35 XP/sec
+    default: return 18; // Was 1.0, now 0.3 XP/sec
   }
 }
 
