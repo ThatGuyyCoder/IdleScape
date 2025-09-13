@@ -38,6 +38,21 @@ export function ActiveTraining({ skill, equipment }: ActiveTrainingProps) {
     },
   });
 
+  const tickProgress = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/skills/tick");
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate queries to refresh the UI with updated progress
+      queryClient.invalidateQueries({ queryKey: ["/api/skills"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/inventory"] });
+    },
+    onError: (error) => {
+      console.error("Failed to update skill progress:", error);
+    },
+  });
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (skill.lastActionTime) {
@@ -48,6 +63,17 @@ export function ActiveTraining({ skill, equipment }: ActiveTrainingProps) {
 
     return () => clearInterval(interval);
   }, [skill.lastActionTime]);
+
+  // Real-time progress tick every 3 seconds while training is active
+  useEffect(() => {
+    if (skill.isActive) {
+      const tickInterval = setInterval(() => {
+        tickProgress.mutate();
+      }, 3000); // Tick every 3 seconds
+
+      return () => clearInterval(tickInterval);
+    }
+  }, [skill.isActive, tickProgress]);
 
   const totalExpBonus = equipment.reduce((acc, equip) => acc + equip.experienceBonus, 0);
   const baseExp = getBaseExpForSkill(skill.skillType);

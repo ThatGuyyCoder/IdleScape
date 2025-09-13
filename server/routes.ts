@@ -146,6 +146,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Real-time skill progress tick
+  app.post("/api/skills/tick", async (req: any, res) => {
+    try {
+      const playerId = await getPlayerId(req);
+      const skills = await storage.getPlayerSkills(playerId);
+      const equipment = await storage.getPlayerEquipment(playerId);
+      
+      const now = Date.now();
+      const gains = [];
+      
+      // Calculate progress for active skills
+      for (const skill of skills) {
+        if (skill.isActive && skill.lastActionTime) {
+          const elapsedSeconds = Math.floor((now - skill.lastActionTime.getTime()) / 1000);
+          
+          if (elapsedSeconds >= 1) {
+            // Calculate equipment bonuses
+            let efficiencyBonus = 1;
+            let expBonus = 1;
+            for (const equip of equipment) {
+              efficiencyBonus += equip.efficiencyBonus / 100;
+              expBonus += equip.experienceBonus / 100;
+            }
+            
+            // Base rates per second
+            const baseExpPerSec = getSkillExpRate(skill.skillType) / 60;
+            const baseItemsPerSec = (0.8 * efficiencyBonus) / 60;
+            
+            const expGained = Math.floor(elapsedSeconds * baseExpPerSec * expBonus);
+            const itemsGained = Math.floor(elapsedSeconds * baseItemsPerSec);
+            
+            const oldLevel = calculateLevel(skill.experience);
+            const newExp = skill.experience + expGained;
+            const newLevel = calculateLevel(newExp);
+            const levelUps = newLevel - oldLevel;
+            
+            // Update skill
+            await storage.updateSkill(playerId, skill.skillType, {
+              experience: newExp,
+              level: newLevel,
+              lastActionTime: new Date(),
+            });
+            
+            // Update inventory with gained items
+            if (skill.currentResource && itemsGained > 0) {
+              const inventory = await storage.getPlayerInventory(playerId);
+              const existingItem = inventory.find(item => item.itemType === skill.currentResource);
+              const newQuantity = (existingItem?.quantity || 0) + itemsGained;
+              await storage.updateInventoryItem(playerId, skill.currentResource, newQuantity);
+            }
+            
+            if (expGained > 0 || itemsGained > 0) {
+              gains.push({
+                skill: skill.skillType,
+                expGained,
+                itemsGained,
+                levelUps,
+              });
+            }
+          }
+        }
+      }
+      
+      // Return updated skills
+      const updatedSkills = await storage.getPlayerSkills(playerId);
+      res.json({
+        skills: updatedSkills,
+        gains: gains,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update skill progress" });
+    }
+  });
+
   // Transfer guest progress to authenticated account
   app.post('/api/save-guest-progress', isAuthenticated, async (req: any, res) => {
     try {
