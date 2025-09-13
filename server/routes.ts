@@ -146,6 +146,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Transfer guest progress to authenticated account
+  app.post('/api/save-guest-progress', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const targetPlayerId = `user-${userId}`;
+      
+      // Check if there's a guest player in the session
+      const guestPlayerId = req.session.guestPlayerId;
+      if (!guestPlayerId) {
+        return res.status(400).json({ 
+          message: "No guest progress found to transfer",
+          transferred: false 
+        });
+      }
+
+      // Verify guest player exists
+      const guestPlayer = await storage.getPlayer(guestPlayerId);
+      if (!guestPlayer) {
+        return res.status(404).json({ 
+          message: "Guest player not found",
+          transferred: false 
+        });
+      }
+
+      // Verify target player exists
+      const targetPlayer = await storage.getPlayer(targetPlayerId);
+      if (!targetPlayer) {
+        return res.status(404).json({ 
+          message: "Target player not found",
+          transferred: false 
+        });
+      }
+
+      console.log(`[DEBUG] Transferring progress from ${guestPlayerId} to ${targetPlayerId}`);
+      
+      // Transfer the progress
+      await storage.transferGuestProgress(guestPlayerId, targetPlayerId);
+      
+      // Clear the guest player from the session to prevent re-transfer
+      delete req.session.guestPlayerId;
+
+      console.log(`[DEBUG] Successfully transferred and cleared guest session`);
+      
+      res.json({ 
+        message: "Guest progress successfully transferred",
+        transferred: true,
+        guestPlayer: guestPlayer.name,
+        targetPlayer: targetPlayer.name
+      });
+    } catch (error) {
+      console.error("Error transferring guest progress:", error);
+      res.status(500).json({ 
+        message: "Failed to transfer guest progress",
+        transferred: false 
+      });
+    }
+  });
+
   // Get player data
   app.get("/api/player", async (req: any, res) => {
     try {
