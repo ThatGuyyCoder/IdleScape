@@ -56,8 +56,18 @@ export function ActiveTraining({ skill, equipment }: ActiveTrainingProps) {
   useEffect(() => {
     const interval = setInterval(() => {
       if (skill.lastActionTime) {
-        const elapsed = Math.floor((Date.now() - new Date(skill.lastActionTime).getTime()) / 1000);
-        setElapsedTime(elapsed);
+        // Ensure proper date parsing
+        const lastActionDate = new Date(skill.lastActionTime);
+        const now = Date.now();
+        const elapsed = Math.floor((now - lastActionDate.getTime()) / 1000);
+        
+        // Ensure elapsed time is never negative
+        const validElapsed = Math.max(0, elapsed);
+        setElapsedTime(validElapsed);
+        
+        if (elapsed < 0) {
+          console.log("[DEBUG] Negative elapsed time detected:", elapsed, "lastActionTime:", skill.lastActionTime, "now:", new Date(now));
+        }
       }
     }, 1000);
 
@@ -67,13 +77,18 @@ export function ActiveTraining({ skill, equipment }: ActiveTrainingProps) {
   // Real-time progress tick every 3 seconds while training is active
   useEffect(() => {
     if (skill.isActive) {
+      console.log("[DEBUG] Starting skill tick interval for", skill.skillType);
       const tickInterval = setInterval(() => {
+        console.log("[DEBUG] Calling skills/tick for", skill.skillType);
         tickProgress.mutate();
       }, 3000); // Tick every 3 seconds
 
-      return () => clearInterval(tickInterval);
+      return () => {
+        console.log("[DEBUG] Clearing skill tick interval for", skill.skillType);
+        clearInterval(tickInterval);
+      };
     }
-  }, [skill.isActive, tickProgress]);
+  }, [skill.isActive]);
 
   const totalExpBonus = equipment.reduce((acc, equip) => acc + equip.experienceBonus, 0);
   const baseExp = getBaseExpForSkill(skill.skillType);
